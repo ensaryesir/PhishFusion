@@ -330,27 +330,55 @@ def ocr_model_config(weights_path, height=None, width=None):
 
     return model
 
-def siamese_model_config(num_classes: int, weights_path: str):
-    # Initialize model
+def siamese_model_config(num_classes: int, weights_path: str, model_type: str = 'resnet', vit_model_name: str = 'vit_base_patch16_224'):
+    """
+    Load Siamese model for logo matching.
+    
+    Args:
+        num_classes: Logo embedding dimension (2048)
+        weights_path: Path to model weights
+        model_type: 'resnet' (default) or 'vit' (Vision Transformer)
+        vit_model_name: ViT model name if using ViT backend
+    
+    Returns:
+        Loaded model ready for inference
+    """
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = KNOWN_MODELS["BiT-M-R50x1"](head_size=num_classes, zero_head=True)
-
-    # Load weights
-    weights = torch.load(weights_path, map_location='cpu')
-    weights = weights['model'] if 'model' in weights.keys() else weights
-    new_state_dict = OrderedDict()
-    for k, v in weights.items():
-        if k.startswith('module'):
-            name = k.split('module.')[1]
-        else:
-            name = k
-        new_state_dict[name] = v
-
-    model.load_state_dict(new_state_dict)
-    model.to(device)
-    model.eval()
+    
+    if model_type == 'vit':
+        # NEW: Vision Transformer Backend
+        from modules.vit_siamese import siamese_vit_config
+        
+        print(f"Loading ViT Siamese model: {vit_model_name}")
+        model = siamese_vit_config(
+            weights_path=weights_path,
+            model_name=vit_model_name
+        )
+        print("✓ ViT backbone loaded (replaces ResNetV2-50)")
+        
+    else:
+        # EXISTING: ResNetV2-50 Backend (backward compatible)
+        print("Loading ResNetV2-50 Siamese model")
+        model = KNOWN_MODELS["BiT-M-R50x1"](head_size=num_classes, zero_head=True)
+    
+        # Load weights
+        weights = torch.load(weights_path, map_location='cpu')
+        weights = weights['model'] if 'model' in weights.keys() else weights
+        new_state_dict = OrderedDict()
+        for k, v in weights.items():
+            if k.startswith('module'):
+                name = k.split('module.')[1]
+            else:
+                name = k
+            new_state_dict[name] = v
+    
+        model.load_state_dict(new_state_dict)
+        model.to(device)
+        model.eval()
+        print("✓ ResNetV2-50 backbone loaded")
 
     return model
+
 
 
 def image_process(image_path, imgH=32, imgW=100, keep_ratio=False, min_ratio=1):
@@ -399,12 +427,12 @@ def get_ocr_aided_siamese_embedding(img, model, ocr_model, grayscale=False):
     '''
     Inference for a single image
     :param img: image path in str or image in PIL.Image
-    :param model: Siamese model to make inference
+    :param model: Siamese model to make inference (ResNet or ViT)
     :param ocr_model: OCR model
     :param imshow: enable display of image or not
     :param title: title of displayed image
     :param grayscale: convert image to grayscale or not
-    :return feature embedding of shape (2048,)
+    :return feature embedding of shape (2048,) for ResNet or (2048,) for ViT
     '''
     img_size = 224
     mean = [0.5, 0.5, 0.5]
@@ -436,12 +464,21 @@ def get_ocr_aided_siamese_embedding(img, model, ocr_model, grayscale=False):
 
     # Predict the embedding
     with torch.no_grad():
-        img = img_transforms(img)
-        img = img[None, ...].to(device)
-        logo_feat = model.features(img, ocr_emb)
-        logo_feat = l2_norm(logo_feat).squeeze(0).cpu().numpy()  # L2-normalization final shape is (2560,)
+        img_tensor = img_transforms(img)
+        img_tensor = img_tensor[None, ...].to(device)
+        
+        # Check if ViT or ResNet model
+        if hasattr(model, 'vit_backbone'):
+            # ViT model: Use forward method (returns L2-normalized 2048-d embedding)
+            logo_feat = model(img_tensor, ocr_emb)
+            logo_feat = logo_feat.squeeze(0).cpu().numpy()  # shape: (2048,)
+        else:
+            # ResNet model: Use features method (returns 2560-d, then L2-normalize)
+            logo_feat = model.features(img_tensor, ocr_emb)
+            logo_feat = l2_norm(logo_feat).squeeze(0).cpu().numpy()  # shape: (2560,)
 
     return logo_feat
+
 
 def chunked_dot(logo_feat_list, img_feat, chunk_size=128):
     sim_list = []

@@ -30,7 +30,7 @@ Pillow  = "8.4.0"
 [pypi-dependencies]
 "editdistance" = "*"
 "cryptography" = "==38.0.4"
-"httpcore" = "==0.15.0"
+"httpcore" = "*"
 "h11" = "*"
 "h2" = "*"
 "blinker" = "==1.7.0"
@@ -44,5 +44,6 @@ Pillow  = "8.4.0"
 "pycocotools" = "*"
 "opencv-python"= "*"
 "opencv-contrib-python"= "*"
+"timm" = "*"
 torch = { version = ">=1.9.0", index = "https://download.pytorch.org/whl/cpu" }
 torchvision = { version = ">=0.10.0", index = "https://download.pytorch.org/whl/cpu" }
