@@ -131,9 +131,29 @@ def visit_url(driver, orig_url):
 
 
 def driver_loader():
-
+    import platform
+    import os
+    
     options = initialize_chrome_settings()
-    service = ChromeService(executable_path="./chromedriver-linux64/chromedriver")
+    
+    # Detect OS and set appropriate ChromeDriver path
+    system = platform.system()
+    if system == "Windows":
+        chromedriver_path = "./chromedriver-win64/chromedriver.exe"
+    elif system == "Linux":
+        chromedriver_path = "./chromedriver-linux64/chromedriver"
+    else:  # macOS
+        chromedriver_path = "./chromedriver-mac64/chromedriver"
+    
+    # Check if ChromeDriver exists
+    if not os.path.exists(chromedriver_path):
+        raise FileNotFoundError(
+            f"ChromeDriver not found at {chromedriver_path}. "
+            "Please download the appropriate ChromeDriver for your Chrome version from "
+            "https://github.com/dreamshao/chromedriver/tree/main"
+        )
+    
+    service = ChromeService(executable_path=chromedriver_path)
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(60)  # set timeout to avoid wasting time
     driver.set_script_timeout(60)  # set timeout to avoid wasting time
