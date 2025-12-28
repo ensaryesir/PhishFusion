@@ -11,6 +11,7 @@ from modules.logo_matching import check_domain_brand_inconsistency
 from modules.crp_classifier import credential_classifier_mixed, html_heuristic
 from modules.crp_locator import crp_locator
 from utils.web_utils import driver_loader
+from modules.url_analyzer import URLAnalyzer  # URL-based detection
 from tqdm import tqdm
 import re
 # from memory_profiler import profile
@@ -23,6 +24,8 @@ class PhishIntentionWrapper:
 
     def __init__(self):
         self._load_config()
+        # Initialize URL analyzer for pre-filtering
+        self.url_analyzer = URLAnalyzer(timeout=3, enable_whois=False)
 
     def _load_config(self):
         self.AWL_MODEL, self.CRP_CLASSIFIER, self.CRP_LOCATOR_MODEL, self.SIAMESE_MODEL, self.OCR_MODEL, \
@@ -41,7 +44,39 @@ class PhishIntentionWrapper:
         logo_match_time = 0
         crp_class_time = 0
         crp_locator_time = 0
-        print("Entering PhishIntention")
+        url_analysis_time = 0
+        
+        print("="*60)
+        print("🚀 PhishFusion: Hybrid URL + Visual Detection")
+        print("="*60)
+
+        ####################### Step 0: URL-Based Analysis (ALWAYS RUN) ##############################################
+        print("\n📊 Step 0: URL Analysis")
+        start_time = time.time()
+        
+        try:
+            url_features = self.url_analyzer.analyze(url)
+            url_analysis_time = time.time() - start_time
+            
+            url_risk_score = url_features.get('risk_score', 0.5)
+            url_risk_level = url_features.get('risk_level', 'unknown')
+            threat_categories = url_features.get('threat_categories', [])
+            
+            print(f"  URL Risk Score: {url_risk_score:.3f} ({url_risk_level.upper()})")
+            print(f"  Analysis Time: {url_analysis_time:.3f}s")
+            
+            if threat_categories:
+                print(f"  Threat Categories: {', '.join(threat_categories)}")
+                
+        except Exception as e:
+            print(f"⚠️  URL Analysis Error: {str(e)}")
+            print(f"  Defaulting to neutral score...")
+            url_risk_score = 0.5
+            url_analysis_time = time.time() - start_time
+
+        print(f"\n{'='*60}")
+        print("🔍 Entering Visual Detection Pipeline")
+        print(f"{'='*60}\n")
 
         while True:
 
@@ -55,18 +90,18 @@ class PhishIntentionWrapper:
                 pred_classes = pred_classes.numpy()
             plotvis = vis(screenshot_path, pred_boxes, pred_classes)
 
-            # If no element is reported
+            # If no element is detected
             if pred_boxes is None or len(pred_boxes) == 0:
                 print('No element is detected, reporte as benign')
                 return phish_category, pred_target, matched_domain, plotvis, siamese_conf, \
-                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time), \
+                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
                             pred_boxes, pred_classes
 
             logo_pred_boxes, _ = find_element_type(pred_boxes, pred_classes, bbox_type='logo')
             if logo_pred_boxes is None or len(logo_pred_boxes) == 0:
                 print('No logo is detected, reporte as benign')
                 return phish_category, pred_target, matched_domain, plotvis, siamese_conf, \
-                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time), \
+                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
                             pred_boxes, pred_classes
 
             print('Entering siamese')
@@ -87,7 +122,7 @@ class PhishIntentionWrapper:
             if pred_target is None:
                 print('Did not match to any brand, report as benign')
                 return phish_category, pred_target, matched_domain, plotvis, siamese_conf, \
-                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time), \
+                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
                             pred_boxes, pred_classes
 
             ######################## Step3: CRP classifier (if a target is reported) #################################
@@ -128,7 +163,7 @@ class PhishIntentionWrapper:
                 if not successful:
                     print('Dynamic analysis cannot find any link redirected to a CRP page, report as benign')
                     return phish_category, pred_target, matched_domain, plotvis, siamese_conf, \
-                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time), \
+                            str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
                             pred_boxes, pred_classes
 
                 else:  # dynamic analysis successfully found a CRP
@@ -138,18 +173,132 @@ class PhishIntentionWrapper:
                 print('Already a CRP, continue')
                 break
 
-        ######################## Step5: Return #################################
+        ######################## Step5: Hybrid Fusion Decision #################################
+        print(f"\n{'='*60}")
+        print("🔬 HYBRID FUSION: Combining URL + Visual Scores")
+        print(f"{'='*60}\n")
+        
+        # Scores from both modalities
+        visual_score = siamese_conf if pred_target is not None else 0.0
+        
+        print(f"  📊 URL Risk Score:     {url_risk_score:.4f}")
+        print(f"  🎯 Visual Confidence:  {visual_score:.4f}")
+        
+        # ============ IMPROVEMENT 4: WHITELIST OVERRIDE ============
+        OFFICIAL_DOMAINS = {
+            'google': ['google.com', 'youtube.com', 'gmail.com', 'gstatic.com', 'googleapis.com'],
+            'microsoft': ['microsoft.com', 'live.com', 'outlook.com', 'office.com', 'windows.com'],
+            'apple': ['apple.com', 'icloud.com', 'me.com'],
+            'amazon': ['amazon.com', 'amazonaws.com', 'cloudfront.net'],
+            'facebook': ['facebook.com', 'fb.com', 'fbcdn.net'],
+            'paypal': ['paypal.com', 'paypal-communication.com'],
+            'netflix': ['netflix.com', 'nflxext.com'],
+            'linkedin': ['linkedin.com', 'licdn.com'],
+            'twitter': ['twitter.com', 't.co', 'twimg.com'],
+        }
+        
+        # Check if detected brand matches official domain
         if pred_target is not None:
-            print('Phishing is found!')
+            import tldextract
+            ext = tldextract.extract(url)
+            registered_domain = ext.registered_domain.lower() if ext.registered_domain else ""
+            
+            brand_lower = pred_target.lower().replace(' ', '').replace('_', '')
+            
+            # Check whitelist
+            if brand_lower in OFFICIAL_DOMAINS:
+                if registered_domain in OFFICIAL_DOMAINS[brand_lower]:
+                    print(f"\n✅ WHITELIST MATCH: {pred_target} on official domain {registered_domain}")
+                    print(f"  Overriding visual detection - marking as BENIGN")
+                    
+                    phish_category = 0
+                    pred_target = None
+                    fusion_score = 0.0
+                    
+                    return phish_category, pred_target, matched_domain, plotvis, fusion_score, \
+                        str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
+                        pred_boxes, pred_classes
+        
+        # ============ IMPROVEMENT 2: SEMANTIC ALIGNMENT BONUS ============
+        alignment_bonus = 0.0
+        alignment_detected = False
+        
+        if pred_target is not None:
+            brand_lower = pred_target.lower().replace(' ', '').replace('_', '')
+            url_lower = url.lower()
+            
+            # Brand name appears in URL but NOT on official domain
+            if brand_lower in url_lower:
+                import tldextract
+                ext = tldextract.extract(url)
+                registered_domain = ext.registered_domain.lower() if ext.registered_domain else ""
+                
+                # Check it's NOT an official domain
+                is_official = False
+                if brand_lower in OFFICIAL_DOMAINS:
+                    is_official = registered_domain in OFFICIAL_DOMAINS[brand_lower]
+                
+                if not is_official:
+                    alignment_bonus = 0.20  # +20% for semantic alignment
+                    alignment_detected = True
+                    print(f"  🎯 SEMANTIC ALIGNMENT: '{brand_lower}' in URL but not official → +0.20 bonus")
+        
+        # ============ IMPROVEMENT 3: ADAPTIVE FUSION LOGIC ============
+        
+        # FUSION STRATEGY: Weighted Average with Adaptive Weighting
+        if pred_target is not None:
+            # Case 1: High URL risk OR Alignment detected (strong phishing signals)
+            if url_risk_score >= 0.4 or alignment_detected:
+                # Both URL and Visual agree it's suspicious
+                # Trust visual more (it has concrete evidence)
+                fusion_score = 0.4 * url_risk_score + 0.6 * visual_score + alignment_bonus
+                decision_reason = "URL + Visual agreement" + (" + Alignment" if alignment_detected else "")
+            
+            # Case 2: Low URL risk but HIGH visual confidence (>0.95)
+            elif visual_score > 0.95:
+                # Visual is VERY confident, URL seems safe
+                # Could be: Google Drive phishing, legitimate widget, or sophisticated attack
+                # Give visual benefit of doubt but stay cautious
+                fusion_score = 0.3 * url_risk_score + 0.7 * visual_score
+                decision_reason = "High visual confidence (URL safe)"
+            
+            # Case 3: Low URL risk and moderate visual confidence
+            else:
+                # Likely legitimate partnership/widget (e.g., Facebook share button)
+                # Trust URL more to reduce false positives
+                fusion_score = 0.7 * url_risk_score + 0.3 * visual_score
+                decision_reason = "Visual detection (URL safe - likely widget)"
+        else:
+            # No visual detection - rely on URL only
+            fusion_score = url_risk_score
+            decision_reason = "URL-only (no logo detected)"
+        
+        print(f"  ⚖️  Fusion Score:      {fusion_score:.4f}")
+        if alignment_bonus > 0:
+            print(f"      (includes +{alignment_bonus:.2f} alignment bonus)")
+        print(f"  📝 Decision Basis:    {decision_reason}")
+        
+        # ============ IMPROVEMENT 1 & 3: LOWERED THRESHOLD ============
+        FUSION_THRESHOLD = 0.60  # ↓ from 0.70 - More sensitive to phishing
+        
+        if fusion_score >= FUSION_THRESHOLD:
+            print(f"\n🚨 PHISHING DETECTED (Fusion: {fusion_score:.4f} >= {FUSION_THRESHOLD})")
             phish_category = 1
-            # Visualize, add annotations
-            cv2.putText(plotvis, "Target: {} with confidence {:.4f}".format(pred_target, siamese_conf),
-                        (int(matched_coord[0] + 20), int(matched_coord[1] + 20)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+            
+            # Visualize if we have visual confirmation
+            if pred_target is not None and plotvis is not None:
+                cv2.putText(plotvis, "PHISHING: {} (Score: {:.2f})".format(pred_target, fusion_score),
+                            (int(matched_coord[0] + 20), int(matched_coord[1] + 20)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        else:
+            print(f"\n✅ BENIGN (Fusion: {fusion_score:.4f} < {FUSION_THRESHOLD})")
+            phish_category = 0
+            pred_target = None  # Override visual detection if fusion score too low
 
-        return phish_category, pred_target, matched_domain, plotvis, siamese_conf, \
-                    str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time), \
+        return phish_category, pred_target, matched_domain, plotvis, fusion_score, \
+                    str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
                     pred_boxes, pred_classes
+
 
 if __name__ == '__main__':
 

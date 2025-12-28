@@ -47,9 +47,12 @@ def load_config(reload_targetlist=False):
     targetlist_folder = zip_file_name.split('.zip')[0]
     full_targetlist_folder_dir = os.path.join(targetlist_dir, targetlist_folder)
 
-    SIAMESE_MODEL = siamese_model_config(num_classes=configs['SIAMESE_MODEL']['NUM_CLASSES'],
-                                         weights_path=configs['SIAMESE_MODEL']['WEIGHTS_PATH'],
-                                         model_type=configs['SIAMESE_MODEL'].get('MODEL_TYPE', 'resnet'))  # NEW: Support ViT!
+    SIAMESE_MODEL = siamese_model_config(
+        num_classes=configs['SIAMESE_MODEL']['NUM_CLASSES'],
+        weights_path=configs['SIAMESE_MODEL']['WEIGHTS_PATH'],
+        model_type=configs['SIAMESE_MODEL'].get('MODEL_TYPE', 'resnet'),
+        swin_model_name=configs['SIAMESE_MODEL'].get('SWIN_MODEL_NAME', 'swin_tiny_patch4_window7_224')
+    )
 
     OCR_MODEL = ocr_model_config(weights_path = configs['SIAMESE_MODEL']['OCR_WEIGHTS_PATH'])
 

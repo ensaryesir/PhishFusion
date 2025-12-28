@@ -330,31 +330,31 @@ def ocr_model_config(weights_path, height=None, width=None):
 
     return model
 
-def siamese_model_config(num_classes: int, weights_path: str, model_type: str = 'resnet', vit_model_name: str = 'vit_base_patch16_224'):
+def siamese_model_config(num_classes: int, weights_path: str, model_type: str = 'resnet', swin_model_name: str = 'swin_tiny_patch4_window7_224'):
     """
     Load Siamese model for logo matching.
     
     Args:
         num_classes: Logo embedding dimension (2048)
         weights_path: Path to model weights
-        model_type: 'resnet' (default) or 'vit' (Vision Transformer)
-        vit_model_name: ViT model name if using ViT backend
+        model_type: 'resnet' (default), 'swin' (Swin Transformer - RECOMMENDED)
+        swin_model_name: Swin model name if using Swin backend
     
     Returns:
         Loaded model ready for inference
     """
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    if model_type == 'vit':
-        # NEW: Vision Transformer Backend
-        from modules.vit_siamese import siamese_vit_config
+    if model_type == 'swin':
+        # NEW: Swin Transformer Backend (85.06% val acc)
+        from modules.swin_siamese import siamese_swin_config
         
-        print(f"Loading ViT Siamese model: {vit_model_name}")
-        model = siamese_vit_config(
+        print(f"Loading Swin Transformer Siamese model: {swin_model_name}")
+        model = siamese_swin_config(
             weights_path=weights_path,
-            model_name=vit_model_name
+            model_name=swin_model_name
         )
-        print("✓ ViT backbone loaded (replaces ResNetV2-50)")
+        print("✓ Swin Transformer backbone loaded (replaces ResNetV2-50)")
         
     else:
         # EXISTING: ResNetV2-50 Backend (backward compatible)
@@ -467,9 +467,9 @@ def get_ocr_aided_siamese_embedding(img, model, ocr_model, grayscale=False):
         img_tensor = img_transforms(img)
         img_tensor = img_tensor[None, ...].to(device)
         
-        # Check if ViT or ResNet model
-        if hasattr(model, 'vit_backbone'):
-            # ViT model: Use forward method (returns L2-normalized 2048-d embedding)
+        # Check if Swin, ViT, or ResNet model
+        if hasattr(model, 'swin_backbone') or hasattr(model, 'vit_backbone'):
+            # Swin/ViT model: Use forward method (returns L2-normalized 2048-d embedding)
             logo_feat = model(img_tensor, ocr_emb)
             logo_feat = logo_feat.squeeze(0).cpu().numpy()  # shape: (2048,)
         else:
@@ -478,6 +478,76 @@ def get_ocr_aided_siamese_embedding(img, model, ocr_model, grayscale=False):
             logo_feat = l2_norm(logo_feat).squeeze(0).cpu().numpy()  # shape: (2560,)
 
     return logo_feat
+
+
+def get_ocr_aided_siamese_embedding_tta(img, model, ocr_model, grayscale=False, enable_tta=True):
+    '''
+    Inference for a single image with optional TTA (Test Time Augmentation).
+    
+    TTA applies 3 different augmentations (original, zoomed, flipped) and averages
+    the embeddings for more robust predictions. Recommended for production use.
+    
+    :param img: image path in str or image in PIL.Image
+    :param model: Siamese model to make inference (Swin or ResNet)
+    :param ocr_model: OCR model
+    :param grayscale: convert image to grayscale or not
+    :param enable_tta: Use TTA for Swin models (default: True)
+    :return feature embedding of shape (2048,) with TTA enhancement
+    '''
+    img_size = 224
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # Load and preprocess image
+    img = Image.open(img) if isinstance(img, str) else img
+    img = img.convert("RGBA").convert("L").convert("RGB") if grayscale else img.convert("RGBA").convert("RGB")
+
+    # Resize while keeping aspect ratio
+    pad_color = 255 if grayscale else (255, 255, 255)
+    img = ImageOps.expand(img, (
+        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2,
+        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2), fill=pad_color)
+    
+    img = img.resize((img_size, img_size))
+
+    # Get OCR embedding
+    with torch.no_grad():
+        ocr_emb = ocr_main(image_path=img, model=ocr_model, height=None, width=None)
+        ocr_emb = ocr_emb[0]
+        ocr_emb = ocr_emb[None, ...].to(device)  # [1, 512]
+
+    # Check if Swin model and TTA is enabled
+    if hasattr(model, 'swin_backbone') and enable_tta:
+        # Use TTA for Swin models
+        from modules.swin_siamese import get_swin_embedding_with_tta
+        
+        print("  🔄 Using TTA (3 augmentations) for robust embedding...")
+        logo_feat_tensor = get_swin_embedding_with_tta(img, ocr_emb, model, device)
+        logo_feat = logo_feat_tensor.squeeze(0).cpu().numpy()  # [2048]
+    
+    else:
+        # Standard inference (no TTA)
+        mean = [0.5, 0.5, 0.5]
+        std = [0.5, 0.5, 0.5]
+        img_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
+        
+        with torch.no_grad():
+            img_tensor = img_transforms(img)
+            img_tensor = img_tensor[None, ...].to(device)
+            
+            # Check model type
+            if hasattr(model, 'swin_backbone') or hasattr(model, 'vit_backbone'):
+                logo_feat = model(img_tensor, ocr_emb)
+                logo_feat = logo_feat.squeeze(0).cpu().numpy()
+            else:
+                # ResNet
+                logo_feat = model.features(img_tensor, ocr_emb)
+                logo_feat = l2_norm(logo_feat).squeeze(0).cpu().numpy()
+
+    return logo_feat
+
 
 
 def chunked_dot(logo_feat_list, img_feat, chunk_size=128):
@@ -513,7 +583,7 @@ def pred_brand(model, ocr_model, domain_map, logo_feat_list, file_name_list, sho
 
     ## get predicted box --> crop from screenshot
     cropped = img.crop((pred_bbox[0], pred_bbox[1], pred_bbox[2], pred_bbox[3]))
-    img_feat = get_ocr_aided_siamese_embedding(cropped, model, ocr_model, grayscale=grayscale)
+    img_feat = get_ocr_aided_siamese_embedding_tta(cropped, model, ocr_model, grayscale=grayscale, enable_tta=True)
 
     ## get cosine similarity with every protected logo
     sim_list = chunked_dot(logo_feat_list, img_feat)  # take dot product for every pair of embeddings (Cosine Similarity)
@@ -526,11 +596,22 @@ def pred_brand(model, ocr_model, domain_map, logo_feat_list, file_name_list, sho
     pred_brand_list = np.array(pred_brand_list)[idx]
     sim_list = np.array(sim_list)[idx]
 
+
     # top1,2,3 candidate logos
     top3_logolist = [Image.open(x) for x in pred_brand_list]
     top3_brandlist = [brand_converter(os.path.basename(os.path.dirname(x))) for x in pred_brand_list]
-    top3_domainlist = [domain_map[x] for x in top3_brandlist]
+    
+    # Handle brands that exist in logo database but not in domain_map
+    top3_domainlist = []
+    for brand in top3_brandlist:
+        if brand in domain_map:
+            top3_domainlist.append(domain_map[brand])
+        else:
+            print(f"⚠️  Warning: Brand '{brand}' found in logos but missing in domain_map.pkl - skipping")
+            top3_domainlist.append([])  # Empty list means no legitimate domains
+    
     top3_simlist = sim_list
+
 
     for j in range(3):
         predicted_brand, predicted_domain = None, None
@@ -548,8 +629,8 @@ def pred_brand(model, ocr_model, domain_map, logo_feat_list, file_name_list, sho
         ## Else if not exceed, try resolution alignment, see if can improve
         else:
             cropped, candidate_logo = resolution_alignment(cropped, top3_logolist[j])
-            img_feat = get_ocr_aided_siamese_embedding(cropped, model, ocr_model, grayscale=grayscale)
-            logo_feat = get_ocr_aided_siamese_embedding(candidate_logo, model, ocr_model, grayscale=grayscale)
+            img_feat = get_ocr_aided_siamese_embedding_tta(cropped, model, ocr_model, grayscale=grayscale, enable_tta=True)
+            logo_feat = get_ocr_aided_siamese_embedding_tta(candidate_logo, model, ocr_model, grayscale=grayscale, enable_tta=True)
             final_sim = logo_feat.dot(img_feat)
             if final_sim >= t_s:
                 predicted_brand = top3_brandlist[j]
@@ -587,10 +668,11 @@ def cache_reference_list(model, ocr_model, targetlist_path: str, grayscale=False
                     or logo_path.endswith('.JPG') or logo_path.endswith('.JPEG'):
                 if logo_path.startswith('loginpage') or logo_path.startswith('homepage'):  # skip homepage/loginpage
                     continue
-                logo_feat_list.append(get_ocr_aided_siamese_embedding(img=os.path.join(targetlist_path, target, logo_path),
-                                                                      model=model,
-                                                                      ocr_model=ocr_model,
-                                                                      grayscale=grayscale))
+                logo_feat_list.append(get_ocr_aided_siamese_embedding_tta(img=os.path.join(targetlist_path, target, logo_path),
+                                                                          model=model,
+                                                                          ocr_model=ocr_model,
+                                                                          grayscale=grayscale,
+                                                                          enable_tta=True))
                 file_name_list.append(str(os.path.join(targetlist_path, target, logo_path)))
 
     return np.asarray(logo_feat_list), np.asarray(file_name_list)

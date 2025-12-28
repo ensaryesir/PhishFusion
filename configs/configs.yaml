@@ -13,10 +13,10 @@ CRP_LOCATOR: # element recognition model -- logo only
   DETECT_THRE: 0.05
 
 SIAMESE_MODEL:
-  MODEL_TYPE: 'vit'  # Vision Transformer (httpcore fixed!)
-  VIT_MODEL_NAME: 'vit_base_patch16_224'  # timm model name
+  MODEL_TYPE: 'swin'  # Swin Transformer (85.06% val acc, 28M params)
+  SWIN_MODEL_NAME: 'swin_tiny_patch4_window7_224'  # timm model name
   NUM_CLASSES: 277 # number of brands, users don't need to modify this even the targetlist is expanded
-  WEIGHTS_PATH:  # Empty = ImageNet pre-trained
+  WEIGHTS_PATH: models/ocr_swin_siamese.pth  # Trained Swin-Tiny weights
   OCR_WEIGHTS_PATH: models/ocr_pretrained.pth.tar
   TARGETLIST_PATH: models/expand_targetlist.zip
   MATCH_THRE: 0.87 # FIXME: threshold is 0.87 in phish-discovery?
