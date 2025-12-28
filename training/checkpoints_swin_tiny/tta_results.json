@@ -1,0 +1,29 @@
+{
+  "model": "swin_tiny_patch4_window7_224",
+  "checkpoint": "checkpoints_swin_tiny/best_model.pth",
+  "best_epoch": 39,
+  "timestamp": "2025-12-26T11:16:44.763473",
+  "device": "cuda",
+  "baseline_results": {
+    "val_accuracy": 85.06,
+    "train_accuracy": 99.88,
+    "val_loss": 1.6955,
+    "train_loss": 0.9567,
+    "num_samples": 609
+  },
+  "tta_results": {
+    "combined_accuracy": 85.39,
+    "improvement": 0.33,
+    "num_augmentations": 3,
+    "per_augmentation": {
+      "original": 85.06,
+      "zoomed": 84.73,
+      "horizontal_flip": 84.89
+    }
+  },
+  "summary": {
+    "baseline_vs_tta": "85.06% \u2192 85.39%",
+    "absolute_improvement": "+0.33%",
+    "relative_improvement": "+0.39%"
+  }
+}

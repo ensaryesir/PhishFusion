@@ -1,0 +1,40 @@
+{
+    "model": "Swin-Tiny + TTA + URL Hybrid",
+    "dataset": "3049_misleading_legitimacy",
+    "dataset_description": "All samples are LEGITIMATE websites. Any phishing detection is a FALSE POSITIVE.",
+    "evaluation_date": "2025-12-28T15:45:51.689469",
+    "metrics": {
+        "total_samples": 3041,
+        "false_positives": 426,
+        "false_positive_rate_percent": 14.008549819138441,
+        "robustness_accuracy_percent": 85.99145018086156,
+        "visual_model_fps": 426,
+        "visual_model_fpr_percent": 14.008549819138441,
+        "url_module_fps": 0,
+        "url_module_fpr_percent": 0.0
+    },
+    "wrongly_accused_brands": {
+        "Google": 76,
+        "Microsoft": 20,
+        "HSBC Bank": 12,
+        "DGI French Tax Authority": 8,
+        "AT&T": 8,
+        "Facebook": 8,
+        "Desjardins": 7,
+        "Bank of Montreal": 7,
+        "banco_de_occidente": 7,
+        "Bank of America": 6
+    },
+    "confidence_scores_fps": {
+        "mean": 0.7230613640065484,
+        "median": 0.6992539882659912,
+        "std": 0.04826009610194031,
+        "min": 0.6661615252494811,
+        "max": 1.0499341626167298
+    },
+    "runtime_analysis": {
+        "avg_logo_matching_tta_seconds": 0.17785677616629936,
+        "avg_url_analysis_seconds": 0.878363050860976,
+        "avg_total_latency_seconds": 1.3995311047755665
+    }
+}
