@@ -1,125 +1,107 @@
-# PhishIntention
+# PhishFusion: Hybrid Phishing Detection
+
 <div align="center">
 
-![Dialogues](https://img.shields.io/badge/Proctected\_Brands\_Size-277-green?style=flat-square)
+![Hybrid Detection](https://img.shields.io/badge/Phishing_Detection-Hybrid_(Visual_+_URL)-blue?style=flat-square)
+![Swin Transformer](https://img.shields.io/badge/Model-Swin_Transformer-orange?style=flat-square)
+![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-green?style=flat-square)
 
-</div>
 <p align="center">
-  <a href="https://www.usenix.org/conference/usenixsecurity22/presentation/liu-ruofan">Paper</a> •
-  <a href="https://sites.google.com/view/
-phishintention">Website</a> •
-  <a href="https://www.youtube.com/watch?v=yU7FrlSJ818">Video</a> •
-  <a href="#citation">Citation</a>
+  <a href="https://www.usenix.org/conference/usenixsecurity22/presentation/liu-ruofan">Original Paper</a> •
+  <a href="https://sites.google.com/view/phishintention">Dataset</a> •
 </p>
 
-## PhishIntention
-- This is the official implementation of "Inferring Phishing Intention via Webpage Appearance and Dynamics: A Deep Vision-Based Approach"USENIX'22 [link to paper](http://linyun.info/publications/usenix22.pdf), [link to our website](https://sites.google.com/view/phishintention/home)
+</div>
 
-- Existing reference-based phishing detectors:
-   - :x: Subject to false positive because they **only capture brand intention**
-     
-- The contributions of our paper:
-   - :white_check_mark: We propose a referenced-based phishing detection system that captures both brand intention and **credential-taking intention**. To the best of our knowledge, this is the first work that analyzes both brand intention and credential-taking intentions in a systematic way for phishing detection.
-   - :white_check_mark: We set up a **phishing monitoring system**. It reports phishing webpages per day with the **highest precision** in comparison to state-of-the-art phishing detection solutions.
+**PhishFusion** is an advanced evolution of PhishIntention that employs a **Hybrid Vision-URL approach** for more accurate phishing detection. 
 
-## Framework
-<img src="big_pic/Screenshot 2021-08-13 at 9.15.56 PM.png" style="width:2000px;height:350px"/>
+We have enhanced the original reference-based system by:
+1.  **Replacing ResNet50 with Swin Transformer**: Utilizing a powerful hierarchical vision transformer (`modules/swin_siamese.py`) for the Siamese logo matching network, significantly improving feature extraction capabilities.
+2.  **Adding URL Analysis**: Integrating a comprehensive heuristic and lexical URL scanner (`modules/url_analyzer.py`) to detect brand impersonation, typosquatting, and suspicious TLDs.
+3.  **Adaptive Hybrid Fusion**: Combining visual confidence scores with URL risk assessments in `phishintention.py` to reduce false positives (e.g., legitimate login widgets) and improve detection on sophisticated attacks.
 
-```Input```: a screenshot, ```Output```: Phish/Benign, Phishing target
-- Step 1: Enter <b>Abstract Layout detector</b>, get predicted elements
+---
 
-- Step 2: Enter <b>Siamese Logo Comparison</b>
-    - If Siamese report no target, ```Return  Benign, None```
-    - Else Siamese report a target, Enter step 3 <b>CRP classifier</b>
-       
-- Step 3: <b>CRP classifier</b>
-   - If <b>CRP classifier</b> reports its a CRP page, go to step 5 <b>Return</b>
-   - ElIf not a CRP page and havent execute <b>CRP Locator</b> before, go to step 4: <b>CRP Locator</b>
-   - Else not a CRP page but have done <b>CRP Locator</b> before, ```Return Benign, None``` 
+## 🚀 Installation & Setup
 
-- Step 4: <b>CRP Locator</b>
-   - Find login/signup links and click, if reach a CRP page at the end, go back to step 1 <b>Abstract Layout detector</b> with an updated URL and screenshot
-   - Else cannot reach a CRP page, ```Return Benign, None``` 
-   
-- Step 5: 
-    - If reach a CRP + Siamese report target: ```Return Phish, Phishing target``` 
-    - Else ```Return Benign, None``` 
+### Prerequisites
+*   **Pixi** (Recommended package manager): [Install Pixi](https://pixi.sh/latest/)
+*   **Chrome Browser** (for dynamic analysis)
 
-## Project structure
-```
-|_ configs: Configuration files for the object detection models and the gloal configurations
-|_ modules: Inference code for layout detector, CRP classifier, CRP locator, and OCR-aided siamese model
-|_ models: the model weights and reference list
-|_ ocr_lib: external code for the OCR encoder
-|_ utils
-|_ configs.py: load configuration files
-|_ phishintention.py: main script
+### Step 1: Clone and Install
+```bash
+# Clone the repository
+git clone https://github.com/ensaryesir/PhishFusion.git
+cd PhishFusion
+
+# Install dependencies using Pixi (creates a reproducible environment)
+pixi install
 ```
 
-## Setup
+### Step 2: Setup Models & Drivers
+1.  **Model Weights**: 
+    The core model `models/ocr_swin_siamese.pth` should be included in this repository. 
+    > **Note**: This file is approx 110MB. If you have issues pulling it, ensure you have Git LFS installed (`git lfs pull`).
 
-### Step 1: Install dependencies:
+2.  **ChromeDriver**:
+    *   Check your Chrome version: `chrome://version/`
+    *   Download the matching [ChromeDriver](https://googlechromelabs.github.io/chrome-for-testing/)
+    *   Place `chromedriver.exe` in the `chromedriver-win64/` folder (or `chromedriver-linux64/` on Linux).
 
-- Prerequisite: [Pixi installed](https://pixi.sh/latest/)
+---
 
-- For Linux/Mac,
+## 💻 Usage
 
-  ```bash
-  export KMP_DUPLICATE_LIB_OK=TRUE
-  git clone https://github.com/lindsey98/PhishIntention.git
-  cd PhishIntention
-  pixi install
-  chmod +x setup.sh
-  ./setup.sh
-  ```
-
-- For Windows,
-
-  ```bash
-  git clone https://github.com/lindsey98/PhishIntention.git
-  cd Phishpedia
-  pixi install
-  setup.bat
-  ```
-
-### Step 2: Install chromedriver:
-- Check your chrome binary version, you can do so by typing ``chrome://version/`` in your browser, or type ``google-chrome --version`` from the command line.
-- Download the corresponding chromedriver from this [repository](https://github.com/dreamshao/chromedriver/tree/main). For example, if you are using ``135.0.7049.42`` on Linux, then you should look for ``135.0.7049.42 chromedriver-linux64.zip``.
-- Unzip the downloaded zip, put the ``chromedriver.exe`` under ``./chromedriver-linux64/``.
-
-## Running PhishIntention from Command Line
-
-When you run the scripts for the 1st time, the reference list needs to be loaded, this may take some time.
+Run the main detection script using Pixi:
 
 ```bash
-pixi run python phishintention.py --folder <folder you want to test e.g. datasets/test_sites> --output_txt <where you want to save the results e.g. test.txt>
+pixi run python phishintention.py --folder <target_folder> --output_txt <results_file.txt>
 ```
 
-The testing folder should be in the structure of:
+### Example
+```bash
+pixi run python phishintention.py --folder datasets/test_sites --output_txt results.txt
+```
 
+### Input Data Structure
+The input folder should follow this structure for each website to be tested:
 ```text
-test_site_1
-|__ info.txt (Write the URL)
-|__ shot.png (Save the screenshot)
-|__ html.txt (HTML source code, optional)
-test_site_2
-|__ info.txt (Write the URL)
-|__ shot.png (Save the screenshot)
-|__ html.txt (HTML source code, optional)
-......
+datasets/test_sites/
+├── test_site_1/
+│   ├── info.txt    (Contains the URL, e.g., https://example.com)
+│   ├── shot.png    (Screenshot of the webpage)
+│   └── html.txt    (HTML source code, optional but recommended)
+├── test_site_2/
+│   └── ...
 ```
 
-## Miscellaneous
-- In our paper, we also implement several phishing detection and identification baselines, see [here](https://github.com/lindsey98/PhishingBaseline)
+---
 
-## Citation
-Please consider citing our work :)
-```bibtex
-@inproceedings{liu2022inferring,
-  title={Inferring Phishing Intention via Webpage Appearance and Dynamics: A Deep Vision Based Approach},
-  author={Liu, Ruofan and Lin, Yun and Yang, Xianglin and Ng, Siang Hwee and Divakaran, Dinil Mon and Dong, Jin Song},
-  booktitle={30th $\{$USENIX$\}$ Security Symposium ($\{$USENIX$\}$ Security 21)},
-  year={2022}
-}
+## 🛠 Project Components
+
+We have modularized and improved the codebase:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| **Core Logic** | `phishintention.py` | Main script implementing the **Hybrid Fusion** logic (URL Risk + Visual Score). |
+| **Vision Model** | `modules/swin_siamese.py` | **[NEW]** Swin Transformer-based Siamese network for OCR-aided logo matching. Replaces the older ResNetV2-50. |
+| **URL Scanner** | `modules/url_analyzer.py` | **[NEW]** heuristic engine detecting brand impersonation, homographs, IP abuse, and more. |
+| **Weights** | `models/ocr_swin_siamese.pth` | **[NEW]** Trained weights for the Swin Transformer model. |
+| **Layout** | `modules/awl_detector.py` | Existing Object Detection model for finding regions of interest (Logos, Inputs). |
+
+### Hybrid Fusion Logic
+The system makes a final decision based on an **Adaptive Fusion Score**:
+
+1.  **Visual Confidence**: How strongly does the screenshot logo match a known target (e.g., Microsoft)?
+2.  **URL Risk**: Is the URL suspicious (e.g., `microsoft-verify.xyz`)?
+3.  **Semantic Alignment**: Does the visible brand match the URL domain?
+
+```python
+# Pseudo-code of Fusion Logic
+Fusion_Score = (Weight_Visual * Optical_Confidence) + (Weight_URL * URL_Risk_Score)
 ```
-If you have any issues running our code, you can raise an issue or send an email to [liu.ruofan16@u.nus.edu, lin_yun@sjtu.edu.cn, dcsdjs@nus.edu.sg](mailto:liu.ruofan16@u.nus.edu,lin_yun@sjtu.edu.cn,dcsdjs@nus.edu.sg)
+
+If the Visual Confidence is extremely high (>95%), we trust it more. If the URL is explicitly malicious (Risk > 0.8), it weighs heavier. This hybridization prevents false positives where visual logos exist but the URL is legitimate (e.g., "Login with Google" on a 3rd party site).
+
+---
+**Disclaimer**: This tool is for research and educational purposes only.
