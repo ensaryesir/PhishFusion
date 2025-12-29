@@ -184,42 +184,8 @@ class PhishIntentionWrapper:
         print(f"  📊 URL Risk Score:     {url_risk_score:.4f}")
         print(f"  🎯 Visual Confidence:  {visual_score:.4f}")
         
-        # ============ IMPROVEMENT 4: WHITELIST OVERRIDE ============
-        OFFICIAL_DOMAINS = {
-            'google': ['google.com', 'youtube.com', 'gmail.com', 'gstatic.com', 'googleapis.com'],
-            'microsoft': ['microsoft.com', 'live.com', 'outlook.com', 'office.com', 'windows.com'],
-            'apple': ['apple.com', 'icloud.com', 'me.com'],
-            'amazon': ['amazon.com', 'amazonaws.com', 'cloudfront.net'],
-            'facebook': ['facebook.com', 'fb.com', 'fbcdn.net'],
-            'paypal': ['paypal.com', 'paypal-communication.com'],
-            'netflix': ['netflix.com', 'nflxext.com'],
-            'linkedin': ['linkedin.com', 'licdn.com'],
-            'twitter': ['twitter.com', 't.co', 'twimg.com'],
-        }
         
-        # Check if detected brand matches official domain
-        if pred_target is not None:
-            import tldextract
-            ext = tldextract.extract(url)
-            registered_domain = ext.registered_domain.lower() if ext.registered_domain else ""
-            
-            brand_lower = pred_target.lower().replace(' ', '').replace('_', '')
-            
-            # Check whitelist
-            if brand_lower in OFFICIAL_DOMAINS:
-                if registered_domain in OFFICIAL_DOMAINS[brand_lower]:
-                    print(f"\n✅ WHITELIST MATCH: {pred_target} on official domain {registered_domain}")
-                    print(f"  Overriding visual detection - marking as BENIGN")
-                    
-                    phish_category = 0
-                    pred_target = None
-                    fusion_score = 0.0
-                    
-                    return phish_category, pred_target, matched_domain, plotvis, fusion_score, \
-                        str(awl_detect_time) + '|' + str(logo_match_time) + '|' + str(crp_class_time) + '|' + str(crp_locator_time) + '|' + str(url_analysis_time), \
-                        pred_boxes, pred_classes
-        
-        # ============ IMPROVEMENT 2: SEMANTIC ALIGNMENT BONUS ============
+        # ============ SEMANTIC ALIGNMENT BONUS ============
         alignment_bonus = 0.0
         alignment_detected = False
         
@@ -227,21 +193,11 @@ class PhishIntentionWrapper:
             brand_lower = pred_target.lower().replace(' ', '').replace('_', '')
             url_lower = url.lower()
             
-            # Brand name appears in URL but NOT on official domain
+            # Brand name appears in URL (potential impersonation)
             if brand_lower in url_lower:
-                import tldextract
-                ext = tldextract.extract(url)
-                registered_domain = ext.registered_domain.lower() if ext.registered_domain else ""
-                
-                # Check it's NOT an official domain
-                is_official = False
-                if brand_lower in OFFICIAL_DOMAINS:
-                    is_official = registered_domain in OFFICIAL_DOMAINS[brand_lower]
-                
-                if not is_official:
-                    alignment_bonus = 0.20  # +20% for semantic alignment
-                    alignment_detected = True
-                    print(f"  🎯 SEMANTIC ALIGNMENT: '{brand_lower}' in URL but not official → +0.20 bonus")
+                alignment_bonus = 0.15  # Reduced from 0.20 (no whitelist check)
+                alignment_detected = True
+                print(f"  🎯 SEMANTIC ALIGNMENT: '{brand_lower}' detected in URL → +0.15 bonus")
         
         # ============ IMPROVEMENT 3: ADAPTIVE FUSION LOGIC ============
         
